@@ -1,10 +1,12 @@
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from time import sleep
+import time
 from datetime import date
 import os
 import pandas as pd
 from selenium.common.exceptions import NoSuchElementException
+
+start = time.time()
 
 
 # STEP 1 - GET LIST OF ALL INITIAL LETTERS FOR ATC CODES
@@ -39,7 +41,7 @@ for item in paragraph:
         details.append(i[0])
 # print(details)
 
-
+print( "Step 1 completed")
 # STEP 2
 
 url2 = 'https://www.whocc.no/atc_ddd_index/?code=' 
@@ -67,7 +69,7 @@ for item in details:
 chapter_nrs = set(chapter_nrs)
 chapter_nrs = list(chapter_nrs)
 
-
+print("Step 2 completed")
 # STEP 3
 
 # initiate an empty list
@@ -113,6 +115,7 @@ for item in subchapter:
 new_list = [x for x in final_list if x != '']
 new_list.sort()
 
+print("steps 3 and 4 completed")
 
 # STEP 5
 
@@ -121,18 +124,33 @@ table = []
 
 # loop through list created in step 4, navigate to subURL
 for item in new_list:
+
     # some subURLs do not have a table present so have to use try/except
     try:
         driver.get(url2+str(item)+url2_part2)
         
-        # find table rows and then for each one, find the table data and return the stripped text
-        for j in driver.find_elements(By.XPATH,  '//*[@id="content"]/ul/table/tbody/tr'):
-            row_data = j.find_elements(By.TAG_NAME, 'td') 
-            row = [i.text.strip() for i in row_data]
-            # append the text to the table list
-            table.append(row)
+        # collect up all rows for a given code
+        k = driver.find_elements(By.XPATH, '//*[@id="content"]/ul/table/tbody/tr')
+        
+        # isolate first row
+        l = k[1].text
+
+        # check whether the first item of the first row matches the items in the new_list
+        # this is to stop the situation where the first row of table for a given code has no ATC code
+        # and therefore gets the wrong info when we fill down later 
+        m = any(item in l for item in new_list)
+        
+        # only if the first item in the first row is an ATC code, continue
+        if str(m)=="True":
+            
+            # find table rows and then for each one, find the table data and return the stripped text
+            for j in driver.find_elements(By.XPATH,  '//*[@id="content"]/ul/table/tbody/tr'):
+                row_data = j.find_elements(By.TAG_NAME, 'td') 
+                row = [i.text.strip() for i in row_data]
+                # append the text to the table list
+                table.append(row)
     except:
-        pass
+            pass
 
 # convert table list into panda dataframe
 df = pd.DataFrame(table)
@@ -149,8 +167,7 @@ df.columns = new_header
 
 # filter dataframe to remove rows where ATC code column = ATC code i.e. table header 
 df = df.loc[df['ATC code'] != 'ATC code']
-df.ffill(axis = 0, inplace=True)
-print(df)
+# print(df)
 
 df.to_csv('ATC_Codes.csv', index = False )
 
@@ -167,4 +184,6 @@ df.loc[:,cols] = df.loc[:,cols].ffill()
 df.to_csv('ATC_Codes.csv', index = False )
 
 print('completed')
+end = time.time()
 
+print(end - start)
