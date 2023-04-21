@@ -1,171 +1,340 @@
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from time import sleep
-from datetime import date
+import datetime
 import os
 import pandas as pd
+from xlsxwriter.utility import xl_rowcol_to_cell
+import win32com.client as win32
 
-df = pd.read_csv(r'C:\Users\NeilHanes\python\tutorial\Latest Months2.csv')
 
-# TODO: run it headlessly so browser doesn't open
+def get_latest_prescibed_data():
+    # open existing csv so we can compare latest month data
+    df = pd.read_excel(r'C:\Users\NeilHanes\python\tutorial\Latest_Month.xlsx')
 
-# added this to ensure when run on system didn't crash. Not sure what it does!
-options = webdriver.ChromeOptions()
-options.add_experimental_option('excludeSwitches', ['enable-logging'])
-driver=webdriver.Chrome(options=options)
+    # added this to ensure when run on system didn't crash. Not sure what it does!
+    options = webdriver.ChromeOptions()
+    options.add_experimental_option('excludeSwitches', ['enable-logging'])
+    # options.add_argument('--headless')
+    driver=webdriver.Chrome(options=options)
 
-# Scottish prescribing data
-url = 'https://www.opendata.nhs.scot/ne/dataset/prescriptions-in-the-community'
+    # Scottish prescribing data
+    url = 'https://www.opendata.nhs.scot/ne/dataset/prescriptions-in-the-community'
 
-# message to user
-print('processing Scotland...')
+    # message to user
+    print('processing Scotland...')
 
-# navigate to Scottish NHS Data Extract page
-driver.get(url)
+    # navigate to Scottish NHS Data Extract page
+    driver.get(url)
 
-# initiate an empty list
-details = []
+    # initiate an empty list
+    details = []
 
-# find first row of data using XPATH address
-month = driver.find_element(By.XPATH, "//*[@id='dataset-resources']/ul/li")
+    # find first row of data using XPATH address
+    month = driver.find_element(By.XPATH, "//*[@id='dataset-resources']/ul/li")
 
-# split the first item by carriage return to get list and bring back the first item in that list
-month = month.text.split("\n")[0]
+    # split the first item by carriage return to get list and bring back the first item in that list
+    month = month.text.split("\n")[0]
 
-# split the string into 3 based on white space and pick out the 3rd item (which will be the latest month) 
-month = month.split(" ",2)[2]
-month = month.strip()
+    # split the string into 3 based on white space and pick out the 3rd item (which will be the latest month) 
+    month = month.split(" ",2)[2]
+    month = month.strip()
 
-if not ( ( df['Country'] == 'Scotland' ) & ( df['Current_Month'].str.contains(month[:3]))).any():
+    if not ( ( df['Country'] == 'Scotland' ) & ( df['Current_Month'].str.contains(month[:3]))).any():
 
-    # now find all elements whose link text has Prescribing Data in 
-    link = driver.find_elements(By.PARTIAL_LINK_TEXT, 'Prescribing Data')
+        # now find all elements whose link text has Prescribing Data in 
+        link = driver.find_elements(By.PARTIAL_LINK_TEXT, 'Prescribing Data')
 
-    # click on the first elements in this list
-    link[0].click()
+        # click on the first elements in this list
+        link[0].click()
 
-    # on new webpage, find the csv URL by XPATH
-    csv_url = driver.find_element(By.XPATH, '//*[@id="content"]/div[3]/section/div/p/a')
+        # on new webpage, find the csv URL by XPATH
+        csv_url = driver.find_element(By.XPATH, '//*[@id="content"]/div[3]/section/div/p/a')
 
-    # and download the csv
-    csv_url.click()
+        # and download the csv
+        csv_url.click()
 
-    # ensure csv downloads completely
-    seconds = 0
-    dl_wait = True
+        # ensure csv downloads completely
+        seconds = 0
+        dl_wait = True
 
-    # create while loop using two variables
-    while dl_wait and seconds < 120:
-        
-        # wait a second
-        sleep(1)
-        print(seconds)
-        # check download file to see if .crdownload file still exists -> indicates file is not fully downloaded yet
-        # if it does exist increment seconds by 1 and continue round loop 
-        dl_wait = False
-        for fname in os.listdir(r'C:\Users\NeilHanes\Downloads'):
-            if fname.endswith('.crdownload'):
-                dl_wait = True
-                seconds += 1
-    Status = "new file downloaded"
-else:
-    print("no new Scottish file")
-    Status = "no new file"
-
-# create dictionary item using this 
-Scot_mth = dict(Country="Scotland", Current_Month=month, Status=Status, Latest_Check=date.today())
+        # create while loop using two variables
+        while dl_wait and seconds < 120:
             
-# add dictionary item to details list
-details.append(Scot_mth)
+            # wait a second
+            sleep(1)
+            
+            # check download file to see if .crdownload file still exists -> indicates file is not fully downloaded yet
+            # if it does exist increment seconds by 1 and continue round loop 
+            dl_wait = False
+            for fname in os.listdir(r'C:\Users\NeilHanes\Downloads'):
+                if fname.endswith('.crdownload'):
+                    dl_wait = True
+                    seconds += 1
+        Status = "new file downloaded"
+    else:
+        print("no new Scottish file")
+        Status = "no new file"
 
-# English prescribing data
-url2 = 'https://opendata.nhsbsa.net/dataset/english-prescribing-data-epd'
+    # create dictionary item using this 
+    Scot_mth = dict(Country="Scotland", Current_Month=month, Status=Status, Latest_Check=datetime.datetime.now().strftime("%a %d %b %Y  %H:%M"))
+                
+    # add dictionary item to details list
+    details.append(Scot_mth)
 
-# message to user
-print('processing England...')
+    # English prescribing data
+    url2 = 'https://opendata.nhsbsa.net/dataset/english-prescribing-data-epd'
 
-# navigate to web page
-driver.get(url2)
+    # message to user
+    print('processing England...')
 
-# scroll down on web page
-driver.execute_script("window.scrollBy(0,document.body.scrollHeight)","")
+    # navigate to web page
+    driver.get(url2)
 
-# collate a list of datasets
-data = driver.find_elements(By.XPATH, '//*[@id="dataset-resources"]/ul/li')
+       # scroll down on web page
+    driver.execute_script("window.scrollBy(0,document.body.scrollHeight)","")
+   
+    # collate a list of datasets
+    data = driver.find_elements(By.XPATH, '//*[@id="dataset-resources"]/ul/li')
+   
+    # pick out first item in data list (which will be the latest months data)
+    results = data[0]
+   
+    # store the name of the latest month
+    eng_month = results.text
+    
+    # split it into three by "-" delimiter
+    head, sep, tail = eng_month.partition("-")
+    tail = tail.replace("Explore", "").strip()
+    
+    sleep(3)
+    
+    if not ( ( df['Country'] == 'England' ) & ( df['Current_Month'].str.contains(tail[:3]))).any():
+        
+        # click the accept cookies button
+        WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH,'//*[@id="ccc-recommended-settings"]'))).click()
+            
+        # click on link related to latest month's data
+        results.click()
 
-# pick out last item in data list (which will be the latest months data)
-results = data[-1]
+        # wait for new web page to load
+        sleep(3)
 
-# store the name of the latest month
-eng_month = results.text
+        # find on page dropdown button / chevron to access menu where zip file to be downloaded can be found
+        dropdown_btn = driver.find_element(By.XPATH, '/html/body/div[4]/div[3]/div/section/div/div[1]/ul/li[1]/div/button')
 
-# split it into three by "-" delimiter
-head, sep, tail = eng_month.partition("-")
-tail = tail.replace("Explore", "").strip()
+        # click on this dropdown button / chevron
+        dropdown_btn.click()
 
-results = data[-1]
+        # wait to ensure dropdown menu loads fully
+        sleep(1)
 
-if not ( ( df['Country'] == 'England' ) & ( df['Current_Month'].str.contains(tail[:3]))).any():
+        # locate zip file download link (as second item in dropdown menu now visible)
+        zip_file = driver.find_element(By.XPATH, '/html/body/div[4]/div[3]/div/section/div/div[1]/ul/li[1]/div/ul/li/a[2]')
 
-    # click on link related to latest month's data
-    results.click()
+        # click to download zip file
+        zip_file.click()
 
-    # wait for new web page to load
+        # ensure zip downloads completely
+        seconds = 0
+        dl_wait = True
+
+        # create while loop using two variables
+        while dl_wait and seconds < 300:
+            
+            # wait a second
+            sleep(1)
+            
+            # check download file to see if .crdownload file still exists -> indicates file is not fully downloaded yet
+            # if it does exist increment seconds by 1 and continue round loop 
+            dl_wait = False
+            for fname in os.listdir(r'C:\Users\NeilHanes\Downloads'):
+                if fname.endswith('.crdownload'):
+                    dl_wait = True
+                    seconds += 1
+        Status = "new file downloaded"
+    else:
+        print("no new English file")
+        Status = "no new file"       
+        
+    # create dictionary item using current month and status as per above
+    England_mth = dict(Country="England", Current_Month=tail.strip(), Status=Status, Latest_Check=datetime.datetime.now().strftime("%a %d %b %Y  %H:%M"))
+                
+    # add dictionary item to details list
+    details.append(England_mth)
+
+    # N Ireland prescribing data
+    url_ire = 'https://www.opendatani.gov.uk/dataset/gp-prescribing-data'
+
+    # message to user
+    print('processing N Ireland...')
+
+    # navigate to N Ireland NHS Data Extract page
+    driver.get(url_ire)
+
+    # find first row of data using XPATH address
+    first_row = driver.find_element(By.XPATH, '//*[@id="__next"]/main/div/div[2]/div[2]/div[1]/div[2]/a')
+
+    # convert webelement list object into text string
+    latest_month = first_row.text
+
+    # split out string into 3 parts and only take last part (this is the part after the comma and represents the date)
+    first_part, sep, last_part = latest_month.partition(",")
+
+    month = last_part.strip()
+
+    # compare the month obtained from web against the month showing in dataframe by comparing first 3 letters of both
+    if not ( ( df['Country'] == 'N Ireland' ) & ( df['Current_Month'].str.contains(month[:3]))).any():
+
+        # if the months differ find all elements whose link text has Download in it
+        link = driver.find_elements(By.PARTIAL_LINK_TEXT, 'Download')
+
+        # maximise window in order to see Download buttons
+        driver.maximize_window()
+
+        # pause
+        sleep(3)
+
+        # tjem click on the first elements in this list
+        link[0].click()
+
+        # pause to allow download to begin
+        sleep(5)
+
+        # ensure csv downloads completely
+        seconds = 0
+        dl_wait = True
+
+        # create while loop using two variables
+        while dl_wait and seconds < 120:
+            
+            # wait a second
+            sleep(1)
+            
+            # check download file to see if .crdownload file still exists -> indicates file is not fully downloaded yet
+            # if it does exist increment seconds by 1 and continue round loop 
+            dl_wait = False
+            for fname in os.listdir(r'C:\Users\NeilHanes\Downloads'):
+                if fname.endswith('.crdownload'):
+                    dl_wait = True
+                    seconds += 1
+        Status = "new file downloaded"
+    else:
+        print("no new N Irish file")
+        Status = "no new file"
+
+    # create dictionary item using this 
+    NI_mth = dict(Country="N Ireland", Current_Month=month, Status=Status, Latest_Check=datetime.datetime.now().strftime("%a %d %b %Y  %H:%M"))
+                
+    # add dictionary item to details list
+    details.append(NI_mth)
+
+    driver.quit()
+    options = webdriver.ChromeOptions()
+    options.add_experimental_option('excludeSwitches', ['enable-logging'])
+    driver=webdriver.Chrome(options=options)
+
+    # # run Welsh prescribing data extraction
+    # import GPWales
+    print("processing Wales...")
+
+    # navigate to Wales NHS Data Extract page
+    driver.get(r'https://nwssp.nhs.wales/ourservices/primary-care-services/general-information/data-and-publications/prescribing-data-extracts/general-practice-prescribing-data-extract/')
+
     sleep(3)
 
-    # find on page dropdown button / chevron to access menu where zip file to be downloaded can be found
-    dropdown_btn = driver.find_element(By.XPATH, '/html/body/div[4]/div[3]/div/section/div/div[1]/ul/li[1]/div/button')
+    driver.execute_script("window.scroll(0,1800)","")
 
-    # click on this dropdown button / chevron
-    dropdown_btn.click()
+    sleep(5)
+    # find first row of data using XPATH address
+    h1 = driver.find_elements(By.XPATH, '/html/body/div[8]/div[2]/div/section/div[1]/div/div/div[18]/div/div[1]/div[2]/div/div/div[2]/div/table/tbody/tr[1]/td/a' )
 
-    # wait to ensure dropdown menu loads fully
-    sleep(1)
+    # convert webelement list object h1 into text string
+    latest_month = h1[0].text
 
-    # locate zip file download link (as second item in dropdown menu now visible)
-    zip_file = driver.find_element(By.XPATH, '/html/body/div[4]/div[3]/div/section/div/div[1]/ul/li[1]/div/ul/li/a[2]')
+    # split out string into 3 parts and only take first part (this gets rid of the text in parentheses)
+    first_part, sep, last_part = latest_month.partition("(")
 
-    # click to download zip file
-    zip_file.click()
+    # split first part into 3 to get rid of "GP Data Extract -" prefix
+    head, sep, tail = first_part.partition("-")
 
-    # ensure zip downloads completely
-    seconds = 0
-    dl_wait = True
+    # print third part with no white space
+    month = tail.strip()
+
+    if not ( ( df['Country'] == 'Wales' ) & ( df['Current_Month'].str.contains(month[:3]))).any():
+
+    # From h1 list, isolate first item and click to download zip file
+        h1[0].click()
+
+    # ensure csv downloads completely
+        seconds = 0
+        dl_wait = True
 
     # create while loop using two variables
-    while dl_wait and seconds < 300:
+        while dl_wait and seconds < 120:
         
         # wait a second
-        sleep(1)
-        
+            sleep(1)
+
         # check download file to see if .crdownload file still exists -> indicates file is not fully downloaded yet
         # if it does exist increment seconds by 1 and continue round loop 
-        dl_wait = False
-        for fname in os.listdir(r'C:\Users\NeilHanes\Downloads'):
-            if fname.endswith('.crdownload'):
-                dl_wait = True
-                seconds += 1
-    Status = "new file downloaded"
-else:
-    print("no new English file")
-    Status = "no new file"       
+            dl_wait = False
+            for fname in os.listdir(r'C:\Users\NeilHanes\Downloads'):
+                if fname.endswith('.crdownload'):
+                    dl_wait = True
+                    seconds += 1
+        Status = "new file downloaded"
+    else:
+        print("no new Welsh file")
+        Status = "no new file"
 
-# create dictionary item using current month and status as per above
-England_mth = dict(Country="England", Current_Month=tail.strip(), Status=Status, Latest_Check=date.today())
-            
-# add dictionary item to details list
-details.append(England_mth)
+    # convert webelement list object h1 into text string
+    latest_month = h1[0].text
 
-# run Welsh prescribing data extraction
-import GPWales
+    # split out string into 3 parts and only take first part (this gets rid of the text in parentheses)
+    first_part, sep, last_part = latest_month.partition("(")
 
-# add welsh dictionary item to details list
-details.append(GPWales.Welsh_mth)
+    # split first part into 3 to get rid of "GP Data Extract -" prefix
+    head, sep, tail = first_part.partition("-")
 
-# initiate dataframe from details list       
-df = pd.DataFrame(details)
+    # print third part with no white space
+    month = tail.strip()
 
-# export dataframe to csv file
-df.to_csv(r'C:\Users\NeilHanes\python\tutorial\Latest Months2.csv', index=False)
+    # convert into dictionary item
+    Welsh_mth = dict(Country="Wales", Current_Month=month, Status=Status, Latest_Check=datetime.datetime.now().strftime("%a %d %b %Y  %H:%M"))
 
-print("process completed")
+    # print(Welsh_mth)
+    driver.close()
+    driver.quit()
+
+    # add welsh dictionary item to details list
+    details.append(Welsh_mth)
+
+    # initiate dataframe from details list       
+    df = pd.DataFrame(details)
+
+    # export dataframe to csv file
+    #df.to_csv(r'C:\Users\NeilHanes\python\tutorial\Latest Months2.csv', index=False)
+
+    with pd.ExcelWriter(r'C:\Users\NeilHanes\python\tutorial\Latest_Month.xlsx', engine = 'xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='output')
+        workbook = writer.book
+        worksheet = writer.sheets['output']
+        worksheet.set_zoom(90)
+        sheet_format = workbook.add_format({ 'align': 'center', 'font_name': 'Century Gothic'})
+        worksheet.set_column('A:D', 25, sheet_format)
+         
+    # send dataframe as an email
+    outlook = win32.Dispatch('outlook.application')
+    mail = outlook.CreateItem(0)
+    mail.To = 'neilhanes@neosypher.com'
+    mail.Subject = 'GP Prescribing Data Status'
+    mail.HTMLBody = df.to_html(index=False) 
+     
+    mail.Send()
+    
+    print("process completed")
+
+get_latest_prescibed_data()
