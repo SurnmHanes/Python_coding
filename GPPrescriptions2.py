@@ -8,17 +8,48 @@ import os
 import pandas as pd
 from xlsxwriter.utility import xl_rowcol_to_cell
 import win32com.client as win32
+import shutil
 
+def download_and_move_file(download_button):
+        
+        # click the button to download
+        download_button.click()
+        
+        # ensure file downloads completely
+        seconds = 0
+        dl_wait = True
+        
+        # create while loop using two variables
+        while dl_wait:
+            
+            # wait a second
+            sleep(1)
+            
+            # check download file to see if .crdownload file still exists -> indicates file is not fully downloaded yet
+            # if it does exist increment seconds by 1 and continue round loop 
+            dl_wait = False
+            for fname in os.listdir(r'C:\Users\NeilHanes\Downloads'):
+                if fname.endswith('.crdownload'):
+                    dl_wait = True
+                    seconds += 1
+        
+        # create list of all files in download folder
+        paths = [os.path.join(r'C:\Users\NeilHanes\Downloads', basename) for basename in os.listdir(r'C:\Users\NeilHanes\Downloads')] 
+        
+        # find latest file and isolate the file name
+        source = max(paths, key = os.path.getctime)
+        source_name = os.path.basename(source)
 
-def get_latest_prescibed_data():
-    # open existing csv so we can compare latest month data
-    df = pd.read_excel(r'C:\Users\NeilHanes\python\tutorial\Latest_Month.xlsx')
+        # destination folder to be AY Projects
+        destination_folder = r'C:\Users\NeilHanes\NeoHealth Hub Ltd\NeoSypher - 08 - Cosmos\AY Projects'
+        
+        # create name of destination file
+        destination = destination_folder + "\\" + source_name
 
-    # added this to ensure when run on system didn't crash. Not sure what it does!
-    options = webdriver.ChromeOptions()
-    options.add_experimental_option('excludeSwitches', ['enable-logging'])
-    # options.add_argument('--headless')
-    driver=webdriver.Chrome(options=options)
+        # move file from downloads to AY Projects
+        shutil.move(source, destination)
+
+def get_scotland():
 
     # Scottish prescribing data
     url = 'https://www.opendata.nhs.scot/ne/dataset/prescriptions-in-the-community'
@@ -28,9 +59,6 @@ def get_latest_prescibed_data():
 
     # navigate to Scottish NHS Data Extract page
     driver.get(url)
-
-    # initiate an empty list
-    details = []
 
     # find first row of data using XPATH address
     month = driver.find_element(By.XPATH, "//*[@id='dataset-resources']/ul/li")
@@ -53,26 +81,10 @@ def get_latest_prescibed_data():
         # on new webpage, find the csv URL by XPATH
         csv_url = driver.find_element(By.XPATH, '//*[@id="content"]/div[3]/section/div/p/a')
 
-        # and download the csv
-        csv_url.click()
-
-        # ensure csv downloads completely
-        seconds = 0
-        dl_wait = True
-
-        # create while loop using two variables
-        while dl_wait and seconds < 120:
-            
-            # wait a second
-            sleep(1)
-            
-            # check download file to see if .crdownload file still exists -> indicates file is not fully downloaded yet
-            # if it does exist increment seconds by 1 and continue round loop 
-            dl_wait = False
-            for fname in os.listdir(r'C:\Users\NeilHanes\Downloads'):
-                if fname.endswith('.crdownload'):
-                    dl_wait = True
-                    seconds += 1
+        # use function to download new file
+        download_and_move_file(csv_url)
+        
+        # set Status
         Status = "new file downloaded"
     else:
         print("no new Scottish file")
@@ -82,16 +94,19 @@ def get_latest_prescibed_data():
     Scot_mth = dict(Country="Scotland", Current_Month=month, Status=Status, Latest_Check=datetime.datetime.now().strftime("%a %d %b %Y  %H:%M"))
                 
     # add dictionary item to details list
-    details.append(Scot_mth)
+    return Scot_mth 
 
-    # English prescribing data
-    url2 = 'https://opendata.nhsbsa.net/dataset/english-prescribing-data-epd'
+
+def get_england():
+
+   # English prescribing data
+    url = 'https://opendata.nhsbsa.net/dataset/english-prescribing-data-epd'
 
     # message to user
     print('processing England...')
 
     # navigate to web page
-    driver.get(url2)
+    driver.get(url)
 
        # scroll down on web page
     driver.execute_script("window.scrollBy(0,document.body.scrollHeight)","")
@@ -134,26 +149,10 @@ def get_latest_prescibed_data():
         # locate zip file download link (as second item in dropdown menu now visible)
         zip_file = driver.find_element(By.XPATH, '/html/body/div[4]/div[3]/div/section/div/div[1]/ul/li[1]/div/ul/li/a[2]')
 
-        # click to download zip file
-        zip_file.click()
-
-        # ensure zip downloads completely
-        seconds = 0
-        dl_wait = True
-
-        # create while loop using two variables
-        while dl_wait and seconds < 300:
-            
-            # wait a second
-            sleep(1)
-            
-            # check download file to see if .crdownload file still exists -> indicates file is not fully downloaded yet
-            # if it does exist increment seconds by 1 and continue round loop 
-            dl_wait = False
-            for fname in os.listdir(r'C:\Users\NeilHanes\Downloads'):
-                if fname.endswith('.crdownload'):
-                    dl_wait = True
-                    seconds += 1
+        # use function to download zip folder
+        download_and_move_file(zip_file)
+        
+        # set Status
         Status = "new file downloaded"
     else:
         print("no new English file")
@@ -161,10 +160,11 @@ def get_latest_prescibed_data():
         
     # create dictionary item using current month and status as per above
     England_mth = dict(Country="England", Current_Month=tail.strip(), Status=Status, Latest_Check=datetime.datetime.now().strftime("%a %d %b %Y  %H:%M"))
-                
-    # add dictionary item to details list
-    details.append(England_mth)
 
+    return England_mth                
+   
+def get_nire():   
+    
     # N Ireland prescribing data
     url_ire = 'https://www.opendatani.gov.uk/dataset/gp-prescribing-data'
 
@@ -190,36 +190,20 @@ def get_latest_prescibed_data():
 
         # if the months differ find all elements whose link text has Download in it
         link = driver.find_elements(By.PARTIAL_LINK_TEXT, 'Download')
-
+        
         # maximise window in order to see Download buttons
         driver.maximize_window()
 
         # pause
         sleep(3)
-
-        # tjem click on the first elements in this list
-        link[0].click()
-
+        
+        # then click on the first elements in this list and use function to download file
+        first_link = link[0]
+        download_and_move_file(first_link)
+        
         # pause to allow download to begin
         sleep(5)
 
-        # ensure csv downloads completely
-        seconds = 0
-        dl_wait = True
-
-        # create while loop using two variables
-        while dl_wait and seconds < 120:
-            
-            # wait a second
-            sleep(1)
-            
-            # check download file to see if .crdownload file still exists -> indicates file is not fully downloaded yet
-            # if it does exist increment seconds by 1 and continue round loop 
-            dl_wait = False
-            for fname in os.listdir(r'C:\Users\NeilHanes\Downloads'):
-                if fname.endswith('.crdownload'):
-                    dl_wait = True
-                    seconds += 1
         Status = "new file downloaded"
     else:
         print("no new N Irish file")
@@ -227,17 +211,12 @@ def get_latest_prescibed_data():
 
     # create dictionary item using this 
     NI_mth = dict(Country="N Ireland", Current_Month=month, Status=Status, Latest_Check=datetime.datetime.now().strftime("%a %d %b %Y  %H:%M"))
-                
-    # add dictionary item to details list
-    details.append(NI_mth)
 
-    driver.quit()
-    options = webdriver.ChromeOptions()
-    options.add_experimental_option('excludeSwitches', ['enable-logging'])
-    driver=webdriver.Chrome(options=options)
+    return NI_mth         
 
-    # # run Welsh prescribing data extraction
-    # import GPWales
+def get_wales():
+   
+    # run Welsh prescribing data extraction
     print("processing Wales...")
 
     # navigate to Wales NHS Data Extract page
@@ -264,27 +243,11 @@ def get_latest_prescibed_data():
     month = tail.strip()
 
     if not ( ( df['Country'] == 'Wales' ) & ( df['Current_Month'].str.contains(month[:3]))).any():
-
-    # From h1 list, isolate first item and click to download zip file
-        h1[0].click()
-
-    # ensure csv downloads completely
-        seconds = 0
-        dl_wait = True
-
-    # create while loop using two variables
-        while dl_wait and seconds < 120:
         
-        # wait a second
-            sleep(1)
-
-        # check download file to see if .crdownload file still exists -> indicates file is not fully downloaded yet
-        # if it does exist increment seconds by 1 and continue round loop 
-            dl_wait = False
-            for fname in os.listdir(r'C:\Users\NeilHanes\Downloads'):
-                if fname.endswith('.crdownload'):
-                    dl_wait = True
-                    seconds += 1
+        # use function to download file
+        download_and_move_file(h1[0])
+        
+        # set Status
         Status = "new file downloaded"
     else:
         print("no new Welsh file")
@@ -304,37 +267,55 @@ def get_latest_prescibed_data():
 
     # convert into dictionary item
     Welsh_mth = dict(Country="Wales", Current_Month=month, Status=Status, Latest_Check=datetime.datetime.now().strftime("%a %d %b %Y  %H:%M"))
-
-    # print(Welsh_mth)
-    driver.close()
-    driver.quit()
-
-    # add welsh dictionary item to details list
-    details.append(Welsh_mth)
-
-    # initiate dataframe from details list       
-    df = pd.DataFrame(details)
-
-    # export dataframe to csv file
-    #df.to_csv(r'C:\Users\NeilHanes\python\tutorial\Latest Months2.csv', index=False)
-
-    with pd.ExcelWriter(r'C:\Users\NeilHanes\python\tutorial\Latest_Month.xlsx', engine = 'xlsxwriter') as writer:
-        df.to_excel(writer, index=False, sheet_name='output')
-        workbook = writer.book
-        worksheet = writer.sheets['output']
-        worksheet.set_zoom(90)
-        sheet_format = workbook.add_format({ 'align': 'center', 'font_name': 'Century Gothic'})
-        worksheet.set_column('A:D', 25, sheet_format)
-         
-    # send dataframe as an email
-    outlook = win32.Dispatch('outlook.application')
-    mail = outlook.CreateItem(0)
-    mail.To = 'neilhanes@neosypher.com'
-    mail.Subject = 'GP Prescribing Data Status'
-    mail.HTMLBody = df.to_html(index=False) 
-     
-    mail.Send()
     
-    print("process completed")
+    return Welsh_mth   
 
-get_latest_prescibed_data()
+# open existing excel so we can compare latest month data
+df = pd.read_excel(r'C:\Users\NeilHanes\python\tutorial\Latest_Month.xlsx')
+
+# added this to ensure when run on system didn't crash. Not sure what it does!
+options = webdriver.ChromeOptions()
+options.add_experimental_option('excludeSwitches', ['enable-logging'])
+# options.add_argument('--headless')
+driver=webdriver.Chrome(options=options)
+
+# create a list of responses from the 4 countries (which will be 4 dictionaries)
+responses = [ 
+    get_scotland(), 
+    get_england(), 
+    get_nire(), 
+    get_wales()
+]
+
+# create an empty list
+dataframes = []
+
+# iterate through the responses list converting the dictionary elements into dataframes
+for response in responses:
+    df = pd.DataFrame(response, index = [0])
+
+    # then append those dataframes to the list (so now have list of dataframes)
+    dataframes.append(df)
+
+# concatenate the dataframes elements in the list into one dataframe
+df = pd.concat(dataframes)
+ 
+with pd.ExcelWriter(r'C:\Users\NeilHanes\python\tutorial\Latest_Month.xlsx', engine = 'xlsxwriter') as writer:
+    df.to_excel(writer, index=False, sheet_name='output')
+    workbook = writer.book
+    worksheet = writer.sheets['output']
+    worksheet.set_zoom(90)
+    sheet_format = workbook.add_format({ 'align': 'center', 'font_name': 'Century Gothic'})
+    worksheet.set_column('A:D', 25, sheet_format)
+
+# send dataframe as an email
+outlook = win32.Dispatch('outlook.application')
+mail = outlook.CreateItem(0)
+mail.To = 'neilhanes@neosypher.com'
+mail.Subject = 'GP Prescribing Data Status'
+# mail.Body = 'This is a test'
+mail.HTMLBody = df.to_html(index=False) #this field is optional
+        
+mail.Send()
+    
+print("process completed")
