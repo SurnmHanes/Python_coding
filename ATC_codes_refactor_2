@@ -1,0 +1,181 @@
+from bs4 import BeautifulSoup
+import requests
+# import re
+import pandas as pd
+import time
+import numpy as np
+
+start = time.time()
+
+# declare variables
+step2_list = []
+step3_list = []
+step4_list = []
+l = []
+
+def get_data_list(url_list):
+    
+    # start a blank list
+    list1 = []
+    
+    # iterate over the input list
+    for i in url_list:
+        
+        page = requests.get(i).text
+        doc = BeautifulSoup(page, "html.parser")
+        paragraph = doc.find_all("p")[1]
+        contents = paragraph.contents
+  
+        # loop through every third item of contents list 
+        for a in range( 0, len(contents), 3):
+            list1.append( contents[a].strip())
+
+        # filter empty elements out of list
+        list1 = [x for x in list1 if x != '']
+
+        # convert list of lists to a flat list
+        flat_list = []
+        
+        # for each element in the list, check what type it is
+        for element in list1:
+            if type(element) is list:
+                for item in element:
+                    flat_list.append(item)
+            else:
+                flat_list.append(element)
+    return flat_list
+
+print("step 1 complete")
+
+# step 2
+
+# iterate over the list of initials and create URLs with them and append to an empty list
+for x in get_data_list( ['https://www.whocc.no/atc_ddd_index/'] ):
+    url2 = f"https://www.whocc.no/atc_ddd_index/?code={x.strip()}&showdescription=no"
+    step2_list.append(url2)
+  
+print("step 2 complete")
+
+# step 3 
+
+# iterate over the list from step 2 to get the relevant URLs and append to the list
+for a in get_data_list(step2_list):
+    step3_url = f"https://www.whocc.no/atc_ddd_index/?code={a.strip()}&showdescription=no"
+    step3_list.append(step3_url)
+    
+print("step 3 complete")
+
+# step 4
+print( "processing step 4...")
+
+# iterate over the list from step 3 to get the URLs
+for a in get_data_list( step3_list ):
+    step4_url = f"https://www.whocc.no/atc_ddd_index/?code={a.strip()}&showdescription=no"
+    step4_list.append(step4_url)
+
+print( "step 4 complete")   
+
+# final step 
+print("processing final step...")
+
+# create counter variable
+counter = 1
+
+# set list from step 4 into final_list variable and loop over
+final_list = get_data_list (step4_list)
+for a in final_list:
+    print(f"collating record: {counter}")
+    try:
+        # navigate to URL
+        step5_url = f"https://www.whocc.no/atc_ddd_index/?code={a.strip()}&showdescription=no"
+        step5_page = requests.get(step5_url).text
+        step5_doc = BeautifulSoup(step5_page, "html.parser")
+        step5_paragraph = step5_doc.find_all("div", id = "content")
+        trimmed_text = [n.text.strip() for n in step5_paragraph]
+        for t in trimmed_text:
+            t = t.split('\n')
+            x = [x.replace('New search\xa0\xa0\xa0\xa0Show text from Guidelines', '') for x in t]
+        
+        headings = x[0:4]
+
+        # find table within html
+        tbody = step5_doc.find("table")
+        
+        # collate all rows
+        rows = tbody.find_all('tr')
+
+        first_row = rows[1].text
+
+        # check whether the first item of the first row matches the items in the new_list
+        # this is to stop the situation where the first row of table for a given code has no ATC code
+        # and therefore gets the wrong info when we fill down later 
+        m = any(item in first_row for item in final_list)
+
+         # only if the first item in the first row is an ATC code, continue
+        if str(m)=="True":
+                
+            # iterate through rows
+            for r in rows:
+
+                # find all the data tags in the row
+                d = r.find_all('td')
+
+                # for each data tag, extract the stripped text and create a list 
+                row = [x.text.strip() for x in d] + headings
+                l.append(row)   
+    except:
+        pass
+    counter = counter + 1   
+
+# transfer list to dataframe
+df = pd.DataFrame(l)
+
+# take first row at headers
+new_header = df.iloc[0]
+
+# convert header data to a list
+new_header = list(new_header)
+
+# change the 7 - 10th elements to header titles (rather than header data) 
+new_header[6:10] = ['Anatomical Main Group', 'Therapeutic Subgroup' , 'Pharmacological subgroup' , 'Chemical subgroup']
+
+# adjust dataframe by removing first (header) row
+df = df[1:]
+
+# add back in first row as header
+df.columns = new_header
+
+# filter ATC code column to remove any rows where entry = "ATC code"
+df = df.loc[df['ATC code'] != 'ATC code']
+
+# isolate columns we need to fill down
+cols = ['ATC code', 'Name']
+
+# transform empty string values into NaN (so we can fill down later)
+df = df.replace(r'^\s*$', np.nan, regex=True)
+
+# fill down columns
+df.loc[:,cols] = df.loc[:,cols].ffill()
+
+# split newly created columns into two - first the code, then the name
+df[['Anatomical Main Group Code','Anatomical Main Group Name' ]] = df['Anatomical Main Group'].str.split(' ', 1, expand=True)
+df[['Therapeutic Subgroup Code', 'Therapeutic Subgroup Name'  ]] = df['Therapeutic Subgroup'].str.split(' ', 1, expand=True)
+df[['Pharmacological Subgroup Code', 'Pharmacological Subgroup Name'  ]] = df['Pharmacological subgroup'].str.split(' ', 1, expand=True)
+df[['Chemical Subgroup Code', 'Chemical Subgroup Name'  ]] = df['Chemical subgroup'].str.split(' ', 1, expand=True)
+
+# drop the original columns now they've been split out
+df.drop(["Anatomical Main Group", 'Therapeutic Subgroup', 'Pharmacological subgroup','Chemical subgroup'], axis = 1, inplace=True)
+
+# change font from capitals to Title case 
+df['Anatomical Main Group Name'] = df['Anatomical Main Group Name'].str.title()
+df['Therapeutic Subgroup Name'] = df['Therapeutic Subgroup Name'].str.title()
+df['Pharmacological Subgroup Name'] = df['Pharmacological Subgroup Name'].str.title()
+df['Chemical Subgroup Name'] = df['Chemical Subgroup Name'].str.title()
+
+# transfer to csv
+df.to_csv('ATC_Codes.csv', index = False)
+
+print('Completed')
+end = time.time()
+
+print(end - start)
