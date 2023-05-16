@@ -3,12 +3,18 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from time import sleep
-import datetime
-import os
-import pandas as pd
+import datetime, os, pandas as pd, shutil
 from xlsxwriter.utility import xl_rowcol_to_cell
 import win32com.client as win32
-import shutil
+from selenium.webdriver.common.keys import Keys
+
+# open existing excel so we can compare latest month data
+df = pd.read_excel(r'C:\Users\NeilHanes\python\tutorial\Latest_Month.xlsx')
+
+# added this to ensure when run on system didn't crash. Not sure what it does!
+options = webdriver.ChromeOptions()
+options.add_experimental_option('excludeSwitches', ['enable-logging'])
+driver=webdriver.Chrome(options=options)
 
 def download_and_move_file(download_button):
         
@@ -19,20 +25,22 @@ def download_and_move_file(download_button):
         seconds = 0
         dl_wait = True
         
-        # create while loop using two variables
-        while dl_wait:
-            
-            # wait a second
-            sleep(1)
+        # create while loop 
+        while dl_wait == True:
+               
+            # wait 5 second
+            sleep(5)
             
             # check download file to see if .crdownload file still exists -> indicates file is not fully downloaded yet
-            # if it does exist increment seconds by 1 and continue round loop 
             dl_wait = False
             for fname in os.listdir(r'C:\Users\NeilHanes\Downloads'):
                 if fname.endswith('.crdownload'):
+                    print("downloading....")
                     dl_wait = True
-                    seconds += 1
         
+        print("new file downloaded")
+
+        sleep(3)
         # create list of all files in download folder
         paths = [os.path.join(r'C:\Users\NeilHanes\Downloads', basename) for basename in os.listdir(r'C:\Users\NeilHanes\Downloads')] 
         
@@ -48,6 +56,9 @@ def download_and_move_file(download_button):
 
         # move file from downloads to AY Projects
         shutil.move(source, destination)
+
+        # notify console which file has been moved
+        print(f"{source_name} moved to AY Projects")
 
 def get_scotland():
 
@@ -96,7 +107,6 @@ def get_scotland():
     # add dictionary item to details list
     return Scot_mth 
 
-
 def get_england():
 
    # English prescribing data
@@ -108,7 +118,7 @@ def get_england():
     # navigate to web page
     driver.get(url)
 
-       # scroll down on web page
+    # scroll down on web page
     driver.execute_script("window.scrollBy(0,document.body.scrollHeight)","")
    
     # collate a list of datasets
@@ -157,7 +167,7 @@ def get_england():
     else:
         print("no new English file")
         Status = "no new file"       
-        
+    
     # create dictionary item using current month and status as per above
     England_mth = dict(Country="England", Current_Month=tail.strip(), Status=Status, Latest_Check=datetime.datetime.now().strftime("%a %d %b %Y  %H:%M"))
 
@@ -199,11 +209,9 @@ def get_nire():
         
         # then click on the first elements in this list and use function to download file
         first_link = link[0]
-        download_and_move_file(first_link)
         
-        # pause to allow download to begin
-        sleep(5)
-
+        download_and_move_file(first_link)
+       
         Status = "new file downloaded"
     else:
         print("no new N Irish file")
@@ -222,11 +230,29 @@ def get_wales():
     # navigate to Wales NHS Data Extract page
     driver.get(r'https://nwssp.nhs.wales/ourservices/primary-care-services/general-information/data-and-publications/prescribing-data-extracts/general-practice-prescribing-data-extract/')
 
-    sleep(3)
+    # find start of webpage (by finding html tag) 
+    htmlElem = driver.find_element(By.TAG_NAME, 'html')
 
-    driver.execute_script("window.scroll(0,1800)","")
+    # go to end of webpage by sending the 'End' key (this activates the API call and return of dynamic JSON data)
+    htmlElem.send_keys(Keys.END)
 
+    # pause to allow website to load
     sleep(5)
+    
+    # go to bottom of webpage (has grown since dynamic content loaded)
+    htmlElem.send_keys(Keys.END)
+
+    # pause 
+    sleep(1)
+
+    # scroll up so Explanatory notes link is in view
+    js_code = "arguments[0].scrollIntoView();"
+    element = driver.find_element(By.PARTIAL_LINK_TEXT, 'GP Prescribing Data Extract')
+    driver.execute_script(js_code, element)
+
+    # pause 
+    sleep(1)
+
     # find first row of data using XPATH address
     h1 = driver.find_elements(By.XPATH, '/html/body/div[8]/div[2]/div/section/div[1]/div/div/div[18]/div/div[1]/div[2]/div/div/div[2]/div/table/tbody/tr[1]/td/a' )
 
@@ -268,24 +294,17 @@ def get_wales():
     # convert into dictionary item
     Welsh_mth = dict(Country="Wales", Current_Month=month, Status=Status, Latest_Check=datetime.datetime.now().strftime("%a %d %b %Y  %H:%M"))
     
-    return Welsh_mth   
-
-# open existing excel so we can compare latest month data
-df = pd.read_excel(r'C:\Users\NeilHanes\python\tutorial\Latest_Month.xlsx')
-
-# added this to ensure when run on system didn't crash. Not sure what it does!
-options = webdriver.ChromeOptions()
-options.add_experimental_option('excludeSwitches', ['enable-logging'])
-# options.add_argument('--headless')
-driver=webdriver.Chrome(options=options)
+    return Welsh_mth 
 
 # create a list of responses from the 4 countries (which will be 4 dictionaries)
-responses = [ 
-    get_scotland(), 
-    get_england(), 
-    get_nire(), 
-    get_wales()
-]
+responses = [
+             get_scotland(), 
+             get_england(), 
+             get_nire(), 
+             get_wales() ]
+
+driver.close()
+driver.quit()
 
 # create an empty list
 dataframes = []
@@ -313,8 +332,7 @@ outlook = win32.Dispatch('outlook.application')
 mail = outlook.CreateItem(0)
 mail.To = 'neilhanes@neosypher.com'
 mail.Subject = 'GP Prescribing Data Status'
-# mail.Body = 'This is a test'
-mail.HTMLBody = df.to_html(index=False) #this field is optional
+mail.HTMLBody = df.to_html(index=False)
         
 mail.Send()
     
