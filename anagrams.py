@@ -25,7 +25,7 @@ else:
             exit()
             
     # all characters in word1 appear in word2. Now need to check the opposite
-    # iterate through word1 testing whether character exists in word2
+    # iterate through word2 testing whether character exists in word1
     # when found a character that doesn't, then can't be anagrams. 
     # print message to user and exit program
     for ch in word2:
