@@ -26,14 +26,14 @@ def extract_to_csv(d):
         
             innings = df['overs'][i]
                         
-            # flatten the innings and including the deliveries dict
+            # flatten the innings and include the deliveries dict
             df_innings = pd.json_normalize(innings, "deliveries")
 
             # choose specific columns and ensure each innings dataframe only has these columns
             columns = ['batter', 'bowler', 'non_striker', 'runs.batter', 'runs.total', 'wickets' ]
             df_innings = df_innings.reindex(columns=columns)
 
-            # add three additional columns: the match innings, the match date and the team who are batting
+            # add four additional columns: the match innings, the match date, the team who are batting and the fielding team (opposition)
             df_innings['innings'] = i + 1
             df_innings['startdate'] = df_dates[0][0]
             df_innings['team'] = df['team'][i]
